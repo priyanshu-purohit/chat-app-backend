@@ -58,7 +58,7 @@ const initSocket = (server) => {
             });
         }
         catch (error) {
-            console.error(`Error updating online status for ${userId}:`, err.message);
+            console.error(`Error updating online status for ${userId}:`, error.message);
         }
 
 
