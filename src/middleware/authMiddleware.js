@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-exports.protect = async (req, res, next) => {
+const protect = async (req, res, next) => {
   let token;
 
   // Check if Bearer token is provided in the headers
@@ -31,3 +31,5 @@ exports.protect = async (req, res, next) => {
     return res.status(401).json({ message: 'Not authorized, no token provided' });
   }
 };
+
+module.exports = { protect };

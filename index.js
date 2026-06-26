@@ -14,6 +14,8 @@ const server = http.createServer(app);
 // Attach Socket.io to HTTP server
 const io = initSocket(server);
 
+app.set('io', io);
+
 
 // Start listening
 server.listen(PORT, () => {
