@@ -65,7 +65,7 @@ const initSocket = (server) => {
 
         socket.on('disconnect', async () => {
             console.log(`🔌 User disconnected (Socket ID: ${socket.id})`);
-            
+
             userSocketMap.delete(userId);
 
             try {
@@ -84,9 +84,65 @@ const initSocket = (server) => {
                 });
             }
             catch (error) {
-                console.error(`Error updating online status for ${userId}:`, err.message);
+                console.error(`Error updating online status for ${userId}:`, error.message);
             }
         });
+
+        // --- Typing Indicators ---
+
+        // Listen for when a user starts typing
+        socket.on("typing_started", ({ receiverId }) => {
+            const receiverSocketId = getReceiverSocketId(receiverId);
+
+            if (receiverSocketId) {
+                io.to(receiverSocketId).emit("typing_started", {
+                    senderId: userId
+                });
+            }
+
+
+        })
+
+        // Listen for when a user stops typing
+        socket.on("typing_stop", ({ receiverId }) => {
+            const receiverSocketId = getReceiverSocketId(receiverId);
+
+            if (receiverSocketId) {
+                io.to(receiverSocketId).emit("typing_stop", {
+                    senderId: userId
+                });
+            }
+        })
+
+
+        // --- Dynamic Presence Update ---
+
+        socket.on("presence_update", async ({ status }) => {
+            const validStatuses = ['Online', 'Offline', 'Away'];
+
+            if (!validStatuses.includes(status)) {
+                return console.error(`Invalid status update attempt: ${status}`);
+            }
+
+            try {
+                const now = Date.now();
+                await User.findByIdAndUpdate(userId, {
+                    status: status,
+                    lastActive: now
+                });
+
+                // Let other clients know this user has shifted state
+                socket.broadcast.emit("user_status_change", {
+                    userId,
+                    status,
+                    lastActive: now,
+                });
+
+                console.log(`Presence updated for ${socket.user.username}: ${status}`);
+            } catch (error) {
+                console.error(`Error updating presence for ${userId}:`, error.message);
+            }
+        })
     });
 
     return io;

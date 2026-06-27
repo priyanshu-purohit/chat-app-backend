@@ -93,7 +93,49 @@ const getMessages = async (req, res) => {
 };
 
 
-module.exports = { 
+// @desc    Mark messages from a specific sender as read
+// @route   PATCH /api/messages/read/:id
+const markAsRead = async (req, res) => {
+    try {
+        const senderId = req.params.id;
+        const currentUserId = req.user._id;
+
+        const result = await Message.updateMany({
+            sender: senderId,
+            receiver: currentUserId,
+            status: { $ne: 'Read' }
+        }, {
+            status: 'Read'
+        });
+
+
+        if (result.modifiedCount > 0) {
+            const io = req.app.get('io');
+            const senderSocketId = getReceiverSocketId(senderId);
+
+            if (senderSocketId) {
+                io.to(senderSocketId).emit("message_read", {
+                    readerId: currentUserId
+                })
+            }
+            console.log(`👁️ Read receipt emitted: ${currentUserId} read messages from ${senderId}`);
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Messages marked as read',
+            modifiedCount: result.modifiedCount
+        });
+
+    }
+    catch (error) {
+        res.status(500).json({ message: 'Error marking messages as read', error: error.message });
+    }
+}
+
+
+module.exports = {
     sendMessage,
-    getMessages
- };
+    getMessages,
+    markAsRead 
+};
