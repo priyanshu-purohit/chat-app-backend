@@ -1,5 +1,17 @@
 const mongoose = require('mongoose');
 
+const reactionSchema = new mongoose.Schema({
+    user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true,
+    },
+    emoji: {
+        type: String,
+        required: true,
+    }
+}, { _id: false }); // Disable generation of _id for subdocuments to save space
+
 const messageSchema = new mongoose.Schema(
     {
         sender: {
@@ -17,12 +29,21 @@ const messageSchema = new mongoose.Schema(
             ref: 'Group',
             required: false,
         },
-
         content: {
             type: String,
             required: [true, 'Message content cannot be empty'],
             trim: true,
         },
+        replyTo: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Message',
+            default: null,
+        },
+        isEdited: {
+            type: Boolean,
+            default: false,
+        },
+        reactions: [reactionSchema],
         status: {
             type: String,
             enum: ['Sent', 'Delivered', 'Read'],
