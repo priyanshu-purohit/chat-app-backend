@@ -10,8 +10,14 @@ const messageSchema = new mongoose.Schema(
         receiver: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User',
-            required: [true, 'Receiver is required'],
+            required: false,
         },
+        group: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Group',
+            required: false,
+        },
+
         content: {
             type: String,
             required: [true, 'Message content cannot be empty'],

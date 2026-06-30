@@ -1,6 +1,8 @@
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Group = require('../models/Group');
+
 
 const userSocketMap = new Map();
 
@@ -51,6 +53,15 @@ const initSocket = (server) => {
             });
 
             userSocketMap.set(userId, socket.id);
+
+            const userGroups = await Group.find({ members: userId });
+
+            if (userGroups.length > 0) {
+                userGroups.forEach((group) => {
+                    socket.join(group._id.toString());
+                    console.log(`👥 User ${socket.user.username} joined room: ${group.name}`);
+                });
+            }
 
             socket.broadcast.emit('user_status_change', {
                 userId,
@@ -142,6 +153,11 @@ const initSocket = (server) => {
             } catch (error) {
                 console.error(`Error updating presence for ${userId}:`, error.message);
             }
+        });
+
+        socket.on("join_group", ({ groupId }) => {
+            socket.join(groupId);
+            console.log(`👥 User ${socket.user.username} joined room dynamically: ${groupId}`);
         })
     });
 
