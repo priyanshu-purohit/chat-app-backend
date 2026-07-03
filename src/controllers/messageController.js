@@ -16,10 +16,23 @@ const sendMessage = async (req, res) => {
         }
 
         const receiver = await User.findById(receiverId);
+        const sender = await User.findById(senderId);
 
         if (!receiver) {
             return res.status(404).json({ message: 'Receiver not found' });
         }
+
+
+        // Has the receiver blocked the sender?
+        if (receiver.blockedUsers.includes(senderId)) {
+            return res.status(403).json({ message: 'You have been blocked by this user' });
+        }
+        // Has the sender blocked the receiver?
+        if (sender.blockedUsers.includes(receiverId)) {
+            return res.status(400).json({ message: 'You cannot send messages to a user you have blocked' });
+        }
+
+        const isMuted = receiver.mutedUsers.includes(senderId);
 
         // Save message to MongoDB
         const newMessage = await Message.create({
@@ -29,22 +42,30 @@ const sendMessage = async (req, res) => {
             replyTo: req.body.replyTo || null
         });
 
+
+
         const io = req.app.get('io');
 
         const receiverSocketId = getReceiverSocketId(receiverId);
 
         if (receiverSocketId) {
-            io.to(receiverSocketId).emit('new_message', newMessage);
+            io.to(receiverSocketId).emit('new_message', {
+                ...newMessage.toJSON(),
+                isMuted: isMuted
+            });
         }
 
-        console.log(`✉️ Real-time message emitted from ${senderId} to socket ${receiverSocketId}`);
+        console.log(`✉️ Real-time message emitted from ${senderId} to socket ${receiverSocketId} (Muted: ${isMuted})`);
+
+
 
         return res.status(201).json({
             success: true,
             message: 'Message sent successfully',
             data: newMessage,
         });
-    } catch (error) {
+    }
+    catch (error) {
         res.status(500).json({ message: 'Error sending message', error: error.message });
     }
 }

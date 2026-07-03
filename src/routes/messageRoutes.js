@@ -18,7 +18,7 @@ router.get('/:id', getMessages);
 
 router.patch('/read/:id', markAsRead);
 
-router.patch('/:id', editMessage);
+router.patch('/:id', editMessage); 
 
 router.delete('/:id', deleteMessage);
 

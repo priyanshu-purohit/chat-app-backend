@@ -29,6 +29,24 @@ const userSchema = new mongoose.Schema(
             type: String,
             default: ``,
         },
+        blockedUsers: [
+            {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'User'
+            }
+        ],
+        mutedUsers: [
+            {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'User'
+            }
+        ],
+        mutedGroups: [
+            {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'Group'
+            }
+        ],
         status: {
             type: String,
             default: 'Offline',
