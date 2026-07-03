@@ -4,9 +4,13 @@ const User = require('../models/User');
 const Group = require('../models/Group');
 
 
+const { createRedisClient } = require("./redis");
+const { createAdapter } = require('@socket.io/redis-adapter');
+
+
 const userSocketMap = new Map();
 
-const initSocket = (server) => {
+const initSocket = async (server) => {
     // Create a new Socket.io server instance linked to our HTTP server
     const io = new Server(server, {
         cors: {
@@ -15,6 +19,20 @@ const initSocket = (server) => {
         },
     });
 
+// Setup Redis Adapter for Horizontal Scaling
+    try {
+        const pubClient = createRedisClient(); // Publisher connection
+        const subClient = pubClient.duplicate(); // Subscriber connection (must be a separate connection)
+
+        await Promise.all([pubClient.connect(), subClient.connect()]);
+
+        io.adapter(createAdapter(pubClient, subClient));
+        console.log('🔴 Socket.io connected to Redis adapter');
+    }
+    catch (err) {
+        console.warn('⚠️ Redis adapter failed to connect. Running in single-node mode:', err.message);
+        // Server continues to work on a single node without Redis
+    }
     io.use(async (socket, next) => {
         try {
             const token = socket.handshake.auth.token || socket.handshake.query.token;
