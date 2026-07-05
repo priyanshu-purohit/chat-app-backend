@@ -15,7 +15,7 @@ const initSocket = async (server) => {
     const io = new Server(server, {
         cors: {
             origin: '*',// Allows connections from any origin (very helpful for local testing)
-            methods: ['GET', 'POST'],
+            methods: ['GET', 'POST'], 
         },
     });
 

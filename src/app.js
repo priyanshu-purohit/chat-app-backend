@@ -7,6 +7,7 @@ const authRoutes = require('./routes/authRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const groupRoutes = require('./routes/groupRoutes');
 const userRoutes = require('./routes/userRoutes');
+const mediaRoutes = require('./routes/mediaRoutes');
 
 const { apiLimiter, authLimiter } = require('./middleware/rateLimiter');
 
@@ -21,6 +22,7 @@ app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/media', mediaRoutes);
 
 
 app.get('/working', (req, res) => {

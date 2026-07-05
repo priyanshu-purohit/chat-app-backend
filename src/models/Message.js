@@ -7,7 +7,7 @@ const reactionSchema = new mongoose.Schema({
         required: true,
     },
     emoji: {
-        type: String,
+        type: String, 
         required: true,
     }
 }, { _id: false }); // Disable generation of _id for subdocuments to save space
@@ -31,8 +31,8 @@ const messageSchema = new mongoose.Schema(
         },
         content: {
             type: String,
-            required: [true, 'Message content cannot be empty'],
             trim: true,
+            default: '',
         },
         replyTo: {
             type: mongoose.Schema.Types.ObjectId,
@@ -44,6 +44,21 @@ const messageSchema = new mongoose.Schema(
             default: false,
         },
         reactions: [reactionSchema],
+        media: {
+            url: {
+                type: String,
+                default: null,
+            },
+            publicId: {
+                type: String,  // Cloudinary public ID (needed for deletion)
+                default: null,
+            },
+            resourceType: {
+                type: String,  // 'image', 'video', 'audio', 'raw' (documents)
+                enum: ['image', 'video', 'audio', 'raw'],
+                default: null,
+            },
+        },
         status: {
             type: String,
             enum: ['Sent', 'Delivered', 'Read'],

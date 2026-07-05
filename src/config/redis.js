@@ -1,7 +1,10 @@
 const { Redis } = require('ioredis');
 
 const createRedisClient = () => {
-    const client = new Redis(process.env.REDIS_URL, {
+    const client = new Redis({
+        host: process.env.REDIS_HOST,         // e.g., '://redislabs.com'
+        port: Number(process.env.REDIS_PORT), // e.g., 12345
+        password: process.env.REDIS_PASSWORD,
         lazyConnect: true,
         retryStrategy(times) {
             const delay = Math.min(times * 500, 30000);
