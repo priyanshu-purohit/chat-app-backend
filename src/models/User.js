@@ -47,6 +47,11 @@ const userSchema = new mongoose.Schema(
                 ref: 'Group'
             }
         ],
+        fcmToken: {
+            type: String,
+            default: '',
+            select: false,
+        },
         status: {
             type: String,
             default: 'Offline',

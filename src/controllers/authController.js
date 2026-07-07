@@ -21,7 +21,7 @@ const register = async (req, res) => {
             username,
             email,
             password
-        });
+        }); 
 
 
         res.status(201).json({

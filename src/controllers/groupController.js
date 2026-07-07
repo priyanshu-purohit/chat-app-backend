@@ -1,6 +1,8 @@
+const { getReceiverSocketId } = require('../config/socket');
 const Group = require('../models/Group');
 const Message = require('../models/Message');
 const User = require('../models/User');
+const { sendPushNotification } = require('./messageController');
 
 
 // @desc    Create a new group
@@ -61,6 +63,24 @@ const sendGroupMessage = async (req, res) => {
         // Broadcast to the Socket.io room representing this group
         const io = req.app.get("io");
         io.to(groupId.toString()).emit("new_group_message", newMessage);
+
+
+        // Send push notifications to group members
+        const sender = await User.findById(senderId);
+
+        const receivers = await User.find({
+            _id: { $in: group.members.filter((id) => id.toString() !== senderId.toString()) }
+        }).select('+fcmToken');
+
+        await Promise.all(
+            receivers.map(async (receiver) => {
+                const socketId = getReceiverSocketId(receiver._id.toString());
+
+                if (!socketId && receiver.fcmToken) {
+                    await sendPushNotification(sender, receiver, content, group.name);
+                }
+            })
+        );
 
         console.log(`📢 Group message emitted to Room ${groupId}`);
         res.status(201).json(newMessage);

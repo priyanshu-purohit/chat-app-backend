@@ -3,6 +3,7 @@ const User = require("../models/User");
 const cloudinary = require('../config/cloudinary');
 const streamifier = require('streamifier');
 const { getReceiverSocketId } = require('../config/socket');
+const { sendPushNotification } = require('./messageController');
 
 const getResourceType = (mimetype) => {
     if (mimetype.startsWith('image/')) return 'image';
@@ -41,11 +42,12 @@ const sendMediaMessage = async (req, res) => {
         if (!req.file) {
             return res.status(400).json({ message: 'No file provided' });
         }
-        // Verify receiver exists
-        const receiver = await User.findById(receiverId);
+
+        const receiver = await User.findById(receiverId).select('+fcmToken');
         if (!receiver) {
             return res.status(404).json({ message: 'Receiver not found' });
         }
+
         // Check block status
         const sender = await User.findById(senderId);
         if (receiver.blockedUsers.includes(senderId)) {
@@ -54,9 +56,11 @@ const sendMediaMessage = async (req, res) => {
         if (sender.blockedUsers.includes(receiverId)) {
             return res.status(400).json({ message: 'You cannot send messages to a user you have blocked' });
         }
+
         // Upload file to Cloudinary
         const resourceType = getResourceType(req.file.mimetype);
         const uploadResult = await uploadToCloudinary(req.file.buffer, resourceType);
+
         // Save message to MongoDB with media metadata
         const newMessage = await Message.create({
             sender: senderId,
@@ -68,10 +72,12 @@ const sendMediaMessage = async (req, res) => {
                 resourceType: resourceType,
             },
         });
+
         // Emit real-time message to receiver if they're online
         const io = req.app.get('io');
         const receiverSocketId = getReceiverSocketId(receiverId);
         const isMuted = sender.mutedUsers.includes(receiverId);
+
 
         if (receiverSocketId) {
             io.to(receiverSocketId).emit('new_message', {
@@ -79,7 +85,16 @@ const sendMediaMessage = async (req, res) => {
                 isMuted,
             });
         }
+        else if (receiver.fcmToken) {
+            let mediaType = 'file';
+            if (resourceType === 'image') mediaType = 'image';
+            else if (resourceType === 'video') mediaType = 'video';
+            else if (resourceType === 'audio') mediaType = 'audio file';
+            else if (resourceType === 'raw') mediaType = 'document';
 
+            const notificationBody = caption ? caption : `📎 [Sent a ${mediaType}]`;
+            await sendPushNotification(sender, receiver, notificationBody);
+        }
 
         res.status(201).json({ success: true, data: newMessage });
     } catch (error) {

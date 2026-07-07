@@ -1,6 +1,34 @@
 const { getReceiverSocketId } = require("../config/socket");
 const Message = require("../models/Message");
 const User = require("../models/User");
+const admin = require("../config/firebase");
+
+const sendPushNotification = async (sender, receiver, content, groupName = null) => {
+    try {
+        const senderName = sender.username;
+        const title = groupName ? groupName : senderName;
+        const body = groupName ? `${senderName}: ${content}` : content;
+
+        await admin.messaging().send({
+            token: receiver.fcmToken,
+            notification: {
+                title,
+                body,
+            },
+        });
+    }
+    catch (error) {
+        if (
+            error.code === "messaging/registration-token-not-registered" ||
+            error.code === "messaging/invalid-registration-token"
+        ) {
+            receiver.fcmToken = null;
+            await receiver.save();
+        }
+
+        console.error("❌Failed to send FCM notification:", error);
+    }
+};
 
 
 // @desc    Send a message to a user
@@ -15,7 +43,7 @@ const sendMessage = async (req, res) => {
             return res.status(400).json({ message: 'Message content cannot be empty' });
         }
 
-        const receiver = await User.findById(receiverId);
+        const receiver = await User.findById(receiverId).select('+fcmToken');
         const sender = await User.findById(senderId);
 
         if (!receiver) {
@@ -42,8 +70,6 @@ const sendMessage = async (req, res) => {
             replyTo: req.body.replyTo || null
         });
 
-
-
         const io = req.app.get('io');
 
         const receiverSocketId = getReceiverSocketId(receiverId);
@@ -53,6 +79,9 @@ const sendMessage = async (req, res) => {
                 ...newMessage.toJSON(),
                 isMuted: isMuted
             });
+        }
+        else if (receiver.fcmToken) {
+            await sendPushNotification(sender, receiver, content);
         }
 
         console.log(`✉️ Real-time message emitted from ${senderId} to socket ${receiverSocketId} (Muted: ${isMuted})`);
@@ -296,5 +325,6 @@ module.exports = {
     markAsRead,
     editMessage,
     deleteMessage,
-    toggelReaction
+    toggelReaction,
+    sendPushNotification
 };
