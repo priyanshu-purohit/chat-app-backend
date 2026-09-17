@@ -19,6 +19,6 @@ router.get("/:id/messages", getGroupMessages);
 
 router.post("/:id/members/add", addMember);
 
-router.post("/:id/member/remove", removeMember);
+router.post("/:id/members/remove", removeMember);
 
 module.exports = router;

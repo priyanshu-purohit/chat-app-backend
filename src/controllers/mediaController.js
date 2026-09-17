@@ -4,6 +4,7 @@ const cloudinary = require('../config/cloudinary');
 const streamifier = require('streamifier');
 const { getReceiverSocketId } = require('../config/socket');
 const { sendPushNotification } = require('./messageController');
+const Group = require("../models/Group");
 
 const getResourceType = (mimetype) => {
     if (mimetype.startsWith('image/')) return 'image';
@@ -59,6 +60,7 @@ const sendMediaMessage = async (req, res) => {
 
         // Upload file to Cloudinary
         const resourceType = getResourceType(req.file.mimetype);
+        console.log("RESOURCE TYPE:", resourceType);
         const uploadResult = await uploadToCloudinary(req.file.buffer, resourceType);
 
         // Save message to MongoDB with media metadata
@@ -102,4 +104,42 @@ const sendMediaMessage = async (req, res) => {
     }
 };
 
-module.exports = { sendMediaMessage };
+
+// @desc    Update user's avatar
+// @route   PATCH /api/media/avatar
+const uploadAvatar = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const image = req.file;
+        const groupId = req.body.groupId;
+
+        if (!image) return res.status(400).json({ message: 'No file provided' });
+
+        const uploadResult = await uploadToCloudinary(image.buffer, "image");
+
+        let updatedConversation;
+
+        if (groupId) {
+            updatedConversation = await Group.findOneAndUpdate(
+                { _id: groupId },
+                { avatar: uploadResult.secure_url },
+                { new: true }
+            ).select('-createdAt -updatedAt -__v');
+        }
+        else {
+            updatedConversation = await User.findOneAndUpdate(
+                { _id: userId },
+                { avatar: uploadResult.secure_url },
+                { new: true }
+            ).select('-password -fcmToken -createdAt -updatedAt -__v -blockedUsers -mutedUsers');
+        }
+
+
+        return res.status(200).json({ success: true, conversation: updatedConversation });
+    }
+    catch (error) {
+        return res.status(500).json({ message: 'Error uploading avatar', error: error.message });
+    }
+};
+
+module.exports = { sendMediaMessage, uploadAvatar };

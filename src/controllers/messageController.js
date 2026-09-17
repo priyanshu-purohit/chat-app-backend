@@ -2,6 +2,7 @@ const { getReceiverSocketId } = require("../config/socket");
 const Message = require("../models/Message");
 const User = require("../models/User");
 const admin = require("../config/firebase");
+const Group = require("../models/Group");
 
 const sendPushNotification = async (sender, receiver, content, groupName = null) => {
     try {
@@ -98,6 +99,196 @@ const sendMessage = async (req, res) => {
         res.status(500).json({ message: 'Error sending message', error: error.message });
     }
 }
+
+// @desc    Get active direct and group conversations for the logged in user
+// @route   GET /api/messages/conversations
+
+const getConversations = async (req, res) => {
+    try {
+        const currentUserId = req.user._id;
+
+        // 1. Fetch all groups the user is a member of
+        const groups = await Group.find({ members: currentUserId });
+
+        const groupIds = groups.map(g => g._id);
+
+        // 2. Fetch the latest direct messages per conversation (aggregated)
+        const directMessageAgg = await Message.aggregate([
+            {
+                $match: {
+                    $or: [
+                        { sender: currentUserId, group: { $exists: false } },
+                        { receiver: currentUserId, group: { $exists: false } }
+                    ]
+                }
+            },
+
+            {
+                $sort: { createdAt: -1 }
+            },
+            {
+                $group: {
+                    _id: {
+                        $cond: [
+                            { $eq: ["$sender", currentUserId] },
+                            "$receiver",
+                            "$sender"
+                        ]
+                    },
+                    lastMessage: { $first: "$$ROOT" }
+                }
+            }
+        ]);
+
+        // 3. Fetch the latest group messages per group (aggregated)
+        const groupMessageAgg = await Message.aggregate([
+            {
+                $match: {
+                    group: { $in: groupIds }
+                }
+            },
+            {
+                $sort: { createdAt: -1 }
+            },
+            {
+                $group: {
+                    _id: "$group",
+                    lastMessage: { $first: "$$ROOT" }
+                }
+            }
+        ]);
+
+        // 4. Get unread message counts for direct messages (aggregated)
+        const unreadCountsAgg = await Message.aggregate([
+            {
+                $match: {
+                    receiver: currentUserId,
+                    status: { $ne: 'Read' },
+                    group: { $exists: false }
+                }
+            },
+            {
+                $group: {
+                    _id: "$sender",
+                    count: { $sum: 1 }
+                }
+            }
+        ]);
+
+        const unreadCountsMap = new Map();
+        unreadCountsAgg.forEach(item => {
+            unreadCountsMap.set(item._id.toString(), item.count);
+        });
+
+        // 5. Fetch participants' user profiles in bulk (N+1 query optimization)
+        const otherUserIds = directMessageAgg.map(item => item._id);
+
+        const users = await User.find({ _id: { $in: otherUserIds } }).select('username avatar status lastactive');
+
+        const usersMap = new Map();
+
+        users.forEach(u => {
+            usersMap.set(u._id.toString(), u);
+        });
+
+        // 6. Build direct conversations
+        const directConversations = directMessageAgg.map(item => {
+            const otherUserIdStr = item._id.toString();
+            const participant = usersMap.get(otherUserIdStr);
+
+            // If participant profile is not found (e.g. deleted user), skip
+            if (!participant) return null;
+
+            return {
+                id: otherUserIdStr,
+                type: 'direct',
+                participant,
+                lastMessage: item.lastMessage,
+                unreadCount: unreadCountsMap.get(otherUserIdStr) || 0,
+                updatedAt: item.lastMessage.createdAt
+            };
+        }).filter(c => c !== null);
+
+        // 7. Build group conversations
+        const groupMessagesMap = new Map();
+
+        groupMessageAgg.forEach(item => {
+            groupMessagesMap.set(item._id.toString(), item.lastMessage);
+        });
+
+        const groupMembersAgg = await Group.aggregate([
+            {
+                $match: {
+                    _id: { $in: groupIds }
+                }
+            },
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'members',
+                    foreignField: '_id',
+                    as: 'members',
+                }
+            },
+            {
+                $project: {
+                    _id: 1,
+                    members: {
+                        _id: 1,
+                        username: 1,
+                        avatar: 1,
+                    },
+                    admins: 1,
+                }
+            },
+        ]);
+
+        const groupMembersMap = new Map();
+
+        groupMembersAgg.forEach(g => {
+            groupMembersMap.set(g._id.toString(), g.members);
+        });
+
+        const groupConversations = groups.map(group => {
+            const groupIdStr = group._id.toString();
+            const lastMessage = groupMessagesMap.get(groupIdStr) || null;
+            const members = groupMembersMap.get(groupIdStr) || [];
+
+            return {
+                id: groupIdStr,
+                type: 'group',
+                group: {
+                    _id: group._id,
+                    name: group.name,
+                    description: group.description,
+                    avatar: group.avatar,
+                    members: members,
+                    admins: group.admins,
+                },
+                lastMessage,
+                unreadCount: 0, //simplified for groups
+                updatedAt: lastMessage ? lastMessage.createdAt : group.createdAt
+            };
+        });
+
+
+
+        // 8. Combine and sort all conversations by updatedAt descending
+        const allConversations = [...directConversations, ...groupConversations].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
+        res.status(200).json({
+            success: true,
+            conversations: allConversations
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching conversation list',
+            error: error.message
+        });
+    }
+};
 
 // @desc    get message from a user
 // @route   GET /api/messages/:id
@@ -253,12 +444,12 @@ const deleteMessage = async (req, res) => {
 
         if (message.group) {
             // Group message deletion
-            io.to(message.group.toString()).emit('message_deleted', { messageId });
+            io.to(message.group.toString()).emit('message_deleted', { messageId, sender: message.sender, receiver: message.receiver, group: message.group });
         } else {
             // Direct message deletion
             const receiverSocketId = getReceiverSocketId(message.receiver.toString());
             if (receiverSocketId) {
-                io.to(receiverSocketId).emit('message_deleted', { messageId });
+                io.to(receiverSocketId).emit('message_deleted', { messageId, sender: message.sender, receiver: message.receiver, group: message.group });
             }
         }
         res.status(200).json({ success: true, message: 'Message deleted successfully', messageId });
@@ -287,7 +478,7 @@ const toggelReaction = async (req, res) => {
             return res.status(404).json({ message: "Message not found" })
         }
 
-        // Check if this user has already reacted with this exact emoji
+        // Check if this user has already reacted with this exact emoji(need to be reviewed when group feature adds in the frontend)
         const existingReactionIndex = message.reactions.findIndex(
             (r) => r.user.toString() === userId.toString() && r.emoji === emoji
         );
@@ -302,13 +493,13 @@ const toggelReaction = async (req, res) => {
         await message.save();
 
         const io = req.app.get('io');
-        const eventData = { messageId, reactions: message.reactions };
+        const eventData = { messageId, sender: message.sender, receiver: message.receiver, group: message.group, reactions: message.reactions };
         if (message.group) {
             // Group reaction emit
             io.to(message.group.toString()).emit('message_reaction', eventData);
         } else {
             // Direct reaction emit (to receiver and sender)
-            const receiverSocketId = getReceiverSocketId(message.receiver.toString());
+            const receiverSocketId = getReceiverSocketId(message.sender.toString());
             if (receiverSocketId) {
                 io.to(receiverSocketId).emit('message_reaction', eventData);
             }
@@ -321,6 +512,7 @@ const toggelReaction = async (req, res) => {
 
 module.exports = {
     sendMessage,
+    getConversations,
     getMessages,
     markAsRead,
     editMessage,

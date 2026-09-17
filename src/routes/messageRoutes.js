@@ -1,18 +1,21 @@
 const express = require('express');
 const router = express.Router();
-const { 
-    sendMessage, 
-    getMessages, 
-    markAsRead, 
-    editMessage, 
-    deleteMessage, 
-    toggelReaction 
+const {
+    sendMessage,
+    getConversations,
+    getMessages,
+    markAsRead,
+    editMessage,
+    deleteMessage,
+    toggelReaction
 } = require('../controllers/messageController');
 const { protect } = require('../middleware/authMiddleware');
 
 router.use(protect);
 
 router.post('/send/:id', sendMessage);
+
+router.get('/conversations', getConversations);
 
 router.get('/:id', getMessages);
 

@@ -33,6 +33,7 @@ const initSocket = async (server) => {
         console.warn('⚠️ Redis adapter failed to connect. Running in single-node mode:', err.message);
         // Server continues to work on a single node without Redis
     }
+    
     io.use(async (socket, next) => {
         try {
             const token = socket.handshake.auth.token || socket.handshake.query.token;
@@ -125,7 +126,8 @@ const initSocket = async (server) => {
 
             if (receiverSocketId) {
                 io.to(receiverSocketId).emit("typing_started", {
-                    senderId: userId
+                    senderId: userId,
+                    name: socket.user.username,
                 });
             }
 
@@ -138,7 +140,8 @@ const initSocket = async (server) => {
 
             if (receiverSocketId) {
                 io.to(receiverSocketId).emit("typing_stop", {
-                    senderId: userId
+                    senderId: userId,
+                    name: socket.user.username,
                 });
             }
         })
@@ -177,6 +180,9 @@ const initSocket = async (server) => {
             socket.join(groupId);
             console.log(`👥 User ${socket.user.username} joined room dynamically: ${groupId}`);
         })
+
+        //leave group remaining
+        
     });
 
     return io;

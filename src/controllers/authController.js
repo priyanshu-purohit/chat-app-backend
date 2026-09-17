@@ -76,7 +76,7 @@ const login = async (req, res) => {
 
 
 // @desc    Get current user profile
-// @route   GET /api/auth/me
+// @route   GET /api/auth/me 
 const getMe = async (req, res) => {
     try {
         const user = req.user;

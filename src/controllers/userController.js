@@ -2,9 +2,46 @@ const Group = require("../models/Group");
 const User = require("../models/User");
 
 
+// @desc    Search for users by username or email
+// @route   GET /api/users/search
+const searchUser = async (req, res) => {
+    try {
+        const searchTerm = req.query.q;
+
+        if (!searchTerm || searchTerm.trim() === '') {
+            return res.status(400).json({ message: 'Search term is required' });
+        }
+
+        console.log(searchTerm);
+
+        const users = await User.find({
+            $or: [
+                { username: new RegExp(searchTerm, 'i') },
+                { email: new RegExp(searchTerm, 'i') }
+            ]
+        });
+
+        if (!users || users.length === 0) {
+            return res.status(404).json({ message: 'No users found' });
+        }
+
+        const filteredUsers = users.filter((user) => user._id.toString() !== req.user._id.toString());
+
+
+        return res.status(200).json(filteredUsers);
+    }
+    catch (error) {
+        console.error("❌ Error searching users:", error);
+        return res.status(500).json({
+            message: "Internal server error",
+            error: error.message,
+        });
+    }
+};
+
 
 // @desc    Toggle block/unblock a user
-// @route   POST /api/users/block/:id
+// @route   POST /api/users/block/:id 
 
 const toggleBlockUser = async (req, res) => {
     try {
@@ -84,7 +121,7 @@ const toggleMuteGroup = async (req, res) => {
         if (!group) return res.status(404).json({ message: 'Group not found' });
 
         const currentUser = await User.findById(currentUserId);
-        
+
         const isMuted = currentUser.mutedGroups.includes(groupId);
 
         if (isMuted) {
@@ -93,14 +130,14 @@ const toggleMuteGroup = async (req, res) => {
             );
             await currentUser.save();
             return res.status(200).json({ message: 'Group unmuted successfully', mutedGroups: currentUser.mutedGroups });
-        } 
+        }
         else {
             currentUser.mutedGroups.push(groupId);
             await currentUser.save();
             return res.status(200).json({ message: 'Group muted successfully', mutedGroups: currentUser.mutedGroups });
         }
 
-    } 
+    }
     catch (error) {
         res.status(500).json({ message: 'Error toggling group mute status', error: error.message });
     }
@@ -138,6 +175,7 @@ const updateFCMToken = async (req, res) => {
 };
 
 module.exports = {
+    searchUser,
     toggleBlockUser,
     toggleMuteUser,
     toggleMuteGroup,

@@ -16,7 +16,7 @@ const groupSchema = new mongoose.Schema(
         avatar: {
             type: String,
             default: '',
-        },
+        }, 
         members: [
             {
                 type: mongoose.Schema.Types.ObjectId,

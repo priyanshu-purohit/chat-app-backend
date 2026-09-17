@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const {
+    searchUser,
     toggleBlockUser,
     toggleMuteUser,
     toggleMuteGroup,
@@ -10,6 +11,7 @@ const { protect } = require('../middleware/authMiddleware');
 
 router.use(protect);
 
+router.get('/search', searchUser);
 router.post('/block/:id', toggleBlockUser);
 router.post('/mute/:id', toggleMuteUser);
 router.post('/mute-group/:id', toggleMuteGroup);

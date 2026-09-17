@@ -40,6 +40,7 @@ const sendGroupMessage = async (req, res) => {
         const groupId = req.params.id;
         const { content } = req.body;
         const senderId = req.user._id;
+        const socketService = req.body.socket;
 
         if (!content || content.trim() === '') {
             return res.status(400).json({ message: 'Message content cannot be empty' });
@@ -62,8 +63,7 @@ const sendGroupMessage = async (req, res) => {
 
         // Broadcast to the Socket.io room representing this group
         const io = req.app.get("io");
-        io.to(groupId.toString()).emit("new_group_message", newMessage);
-
+        io.to(groupId.toString()).except(socketService).emit("new_group_message", newMessage);
 
         // Send push notifications to group members
         const sender = await User.findById(senderId);
@@ -83,7 +83,11 @@ const sendGroupMessage = async (req, res) => {
         );
 
         console.log(`📢 Group message emitted to Room ${groupId}`);
-        res.status(201).json(newMessage);
+        res.status(201).json({
+            success: true,
+            message: 'Message sent successfully',
+            data: newMessage,
+        });
     }
     catch (error) {
         res.status(500).json({ message: 'Error sending group message', error: error.message });
@@ -165,6 +169,9 @@ const addMember = async (req, res) => {
 
         group.members.push(userId);
         await group.save();
+
+        await group.populate('members', 'username avatar status lastActive');
+
         res.status(200).json({ message: 'Member added successfully', group });
     } catch (error) {
         res.status(500).json({ message: 'Error adding member', error: error.message });
@@ -182,7 +189,8 @@ const removeMember = async (req, res) => {
         const { userId } = req.body;
         const currentUserId = req.user._id;
 
-        const group = await Group.findById(groupId);
+        const group = await Group.findById(groupId).populate('members', 'username avatar status lastActive');
+
 
         if (!group) return res.status(404).json({ message: 'Group not found' });
 
@@ -191,14 +199,14 @@ const removeMember = async (req, res) => {
         }
 
         // Remove from members and admins array
-        group.members = group.members.filter((id) => id.toString() !== userId);
+        group.members = group.members.filter((member) => member._id.toString() !== userId);
         group.admins = group.admins.filter((id) => id.toString() !== userId);
         await group.save();
+
         res.status(200).json({ message: 'Member removed successfully', group });
 
     } catch (error) {
         res.status(500).json({ message: 'Error removing member', error: error.message });
-
     }
 };
 
